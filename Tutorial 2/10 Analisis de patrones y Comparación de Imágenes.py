@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import filedialog, messagebox
+from tkinter import messagebox
 from PIL import Image, ImageTk
 import numpy as np
 import imutils
@@ -7,45 +7,16 @@ import cv2
 from datetime import datetime
 import os
 
-#Variables globales
-global img, Region,valor
 imageToShow = None
 Captura = None
 
 #Ventana
 ventana = tk.Tk()
-ventana.geometry("1500x600")
-ventana.title("Analisis de patrones") 
+ventana.geometry("1500x700")
+ventana.title("Analisis de patrones y Comparación de Imágenes") 
 
 #Direccion donde se guardaran las fotos, cambiar al usar en otra pc
-personPath = r'C:\Users\oicas\Documents\vscode\Practica\Tutorial 2\CapturasTuto2-10'
-
-#Funciones
-def archivo():
-    try:
-        # Lee la imagen
-        path_image = filedialog.askopenfilename(filetype=[
-            ("image", "jpg"),
-            ("image", "jpeg"),
-            ("image", "png")])
-        if len(path_image) > 0:
-            global imagenFile, img, imageToShow, valor
-            imagenFile = cv2.imread(path_image)
-            imagenFile = imutils.resize(imagenFile, height=240)
-            imagenFile = imutils.resize(imagenFile, width=300)
-            imageToShow = cv2.cvtColor(imagenFile, cv2.COLOR_BGR2RGB)
-            im = Image.fromarray(imageToShow)
-            img = ImageTk.PhotoImage(image=im)
-            LImagen.configure(image=img)
-            LImagen.image = img
-            imageToShow = cv2.cvtColor(imagenFile, cv2.COLOR_BGR2GRAY)
-            im = Image.fromarray(imageToShow)
-            img = ImageTk.PhotoImage(image=im)
-            LImagen2.configure(image=img)
-            LImagen2.image = img
-            valor = 0
-    except Exception:
-        imageToShow = None
+personPath = r'C:\Users\oicas\Documents\PRACTICA1\Tutorial 2\Imagenes'
 
 #Creación de la función cámara la que permite tomar una fotografía a través de la cámara 
 # para posteriormente analizarla
@@ -53,23 +24,61 @@ def archivo():
 camara_activada = False
 boton_iniciar_visible = False
 
+# Función para mostrar la cámara umbralizada en tiempo real
+def mostrar_camara_umbralizada():
+    global capture, LImagenUmbralizada, Captura_threshold  # Añadir Captura como global
+    if capture is not None:
+        ret, frame = capture.read()
+        if ret: 
+            # Cambiar a escala de grises y aplicar umbralización
+            gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            
+            # Obtener el valor del Spinbox, con un valor predeterminado en caso de error
+            try:
+                umb = int(SGray.get())
+            except ValueError:
+                umb = 0
+            
+            _, threshold_frame = cv2.threshold(gray_frame, umb, 255, cv2.THRESH_BINARY)
+            
+            # Guardar la imagen umbralizada en Captura
+            Captura_threshold = threshold_frame  # Ahora Captura contiene la imagen umbralizada
+            
+            # Redimensionar la imagen al tamaño del Label
+            threshold_frame_resized = cv2.resize(threshold_frame, (300, 240), interpolation=cv2.INTER_AREA)
+            
+            # Convertir a formato compatible con Tkinter
+            im = Image.fromarray(threshold_frame_resized)
+            img_umbralizada = ImageTk.PhotoImage(image=im)
+            
+            # Mostrar la imagen umbralizada en el nuevo Label
+            LImagenUmbralizada.configure(image=img_umbralizada)
+            LImagenUmbralizada.image = img_umbralizada
+            
+            LImagenUmbralizada.after(100, mostrar_camara_umbralizada)
+        else:
+            LImagenUmbralizada.image = ""
+            capture.release()
+            messagebox.showerror("Error", "No se pudo capturar ningún fotograma.")
+
 def camara():
     global capture, camara_activada, boton_iniciar_visible
     if not camara_activada:
         try:
             capture = cv2.VideoCapture(cv2.CAP_ANY)
             iniciar()
+            mostrar_camara_umbralizada()  # Iniciar la vista umbralizada en tiempo real
             camara_activada = True
-            boton_iniciar_visible = True  # Mostrar el botón "Iniciar captura"
+            boton_iniciar_visible = True
         except Exception as e:
-            messagebox.showerror(message="Error al inicializar la cámara: " + str(e))
+            messagebox.showerror("Error al inicializar la cámara: " + str(e))
     else:
-        # Si la cámara ya está activada, detén la captura y libera los recursos
         if capture is not None:
             capture.release()
-            boton_iniciar_visible = False  # Ocultar el botón "Iniciar captura"
+            boton_iniciar_visible = False
         LImagen.configure(image="")
-        messagebox.showinfo(message="Cámara desactivada")
+        LImagenUmbralizada.configure(image="")  # Limpiar el Label de la imagen umbralizada
+        messagebox.showinfo("Información", "Cámara desactivada")
         camara_activada = False
 
 #La funcion iniciar permite inicializar la camara para poder tomar 
@@ -78,7 +87,7 @@ def iniciar():
     global capture
     if capture is not None:
         if boton_iniciar_visible:
-            BCapturar.place(x=150, y=355, width=91, height=23)
+            BCapturar.place(x=250, y=310, width=91, height=23)
         else:
             BCapturar.place_forget()
         ret, frame = capture.read()
@@ -90,7 +99,7 @@ def iniciar():
             img = ImageTk.PhotoImage(image=im)
             LImagen.configure(image=img)
             LImagen.image = img
-            LImagen.after(10, iniciar)
+            LImagen.after(100, iniciar)
         else:
             LImagen.image = ""
             capture.release()
@@ -233,7 +242,7 @@ def comparar_con_imagen(descriptors_cam, img_carpeta):
     orb = cv2.ORB_create()
     _, descriptors_folder = orb.detectAndCompute(img_carpeta, None)
     if descriptors_folder is None:
-        return None, float('inf')  # Retornar un puntaje alto si no hay descriptores en la imagen de carpeta
+        return None, float('inf')  # Retornar un puntaje alto si no hay descriptores en la imagen de la carpeta
     bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
     matches = bf.match(descriptors_cam, descriptors_folder)
     if not matches:
@@ -243,53 +252,36 @@ def comparar_con_imagen(descriptors_cam, img_carpeta):
     return img_carpeta, score
 
 def comparar_imagenes():
-    global capture, img_folder, LImagenCarpeta, CajaTexto2
-    umb = int(SGray.get())
-    # Verificar que existan una carpeta y una captura
-    if not img_folder:
-        messagebox.showwarning("Advertencia", "Primero debes cargar una carpeta con imágenes.")
-        return
-    if capture is None or not capture.isOpened():
-        messagebox.showwarning("Advertencia", "Primero debes capturar una imagen con la cámara.")
-        return
-    # Capturar y procesar la imagen de la cámara
-    ret, img_cam = capture.read()
-    if not ret:
-        messagebox.showerror("Error", "Error al capturar la imagen.")
-        return
-    #img_cam_gray = cv2.cvtColor(img_cam, cv2.COLOR_BGR2GRAY)
-    _, img_cam_thresh = cv2.threshold(img_cam, umb, 255, cv2.THRESH_BINARY)
-    #img_cam_gray = cv2.GaussianBlur(img_cam_gray, (5, 5), 0)
-    img_cam_thresh = cv2.GaussianBlur(img_cam_thresh, (5, 5), 0)
-    orb = cv2.ORB_create()
-    _, descriptors_cam = orb.detectAndCompute(img_cam_thresh, None)
+    global Captura_threshold, img_folder    
+    # Verificar si hay una captura y si hay imágenes en la carpeta
+    if Captura_threshold is None or not img_folder:
+        messagebox.showwarning("Advertencia", "Por favor, capture una imagen y cargue las imágenes de la carpeta.")
+        return    
+    # Crear el detector de características
+    orb = cv2.ORB_create()    
+    # Obtener descriptores de la imagen de la cámara
+    keypoints_cam, descriptors_cam = orb.detectAndCompute(Captura_threshold, None)
     if descriptors_cam is None:
         messagebox.showerror("Error", "No se encontraron características en la imagen de la cámara.")
-        return
-    # Inicializar la mejor coincidencia
+        return    
+    # Variables para la mejor coincidencia
     mejor_coincidencia = None
-    mejor_score = float('inf')
-    # Comparar con cada imagen de la carpeta
+    mejor_score = float('inf')    
+    # Iterar sobre cada imagen en la carpeta
     for img_path in img_folder:
-        img_carpeta = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
-        if img_carpeta is not None:
-            # Comparar con la imagen natural
-            img_carpeta, score_natural = comparar_con_imagen(descriptors_cam, img_carpeta)
-            # Comparar con la imagen umbralizada
-            img_carpeta_thresh = cv2.threshold(img_carpeta, umb, 255, cv2.THRESH_BINARY)[1]
-            img_carpeta, score_thresh = comparar_con_imagen(descriptors_cam, img_carpeta_thresh)            
-            # Elegir la mejor coincidencia
-            if score_natural < mejor_score:
-                mejor_coincidencia = img_carpeta
-                mejor_score = score_natural
-            if score_thresh < mejor_score:
-                mejor_coincidencia = img_carpeta_thresh
-                mejor_score = score_thresh
-    # Mostrar resultados
+        # Leer y convertir a escala de grises
+        img_carpeta = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)        
+        # Obtener la coincidencia y el score con la imagen actual de la carpeta
+        _, score = comparar_con_imagen(descriptors_cam, img_carpeta)        
+        # Si el score es mejor (menor) que el anterior, actualizamos la mejor coincidencia
+        if score < mejor_score:
+            mejor_coincidencia = img_carpeta
+            mejor_score = score    
+    # Mostrar el resultado
     if mejor_coincidencia is not None:
         mostrar_resultado(mejor_coincidencia, mejor_score)
     else:
-        messagebox.showinfo("Resultado", "No se encontraron coincidencias.")
+        messagebox.showinfo("Información", "No se encontró una coincidencia válida.")
 
 def mostrar_resultado(mejor_coincidencia, mejor_score):
     # Función para actualizar la interfaz con la imagen encontrada
@@ -323,10 +315,8 @@ SH.set(240)
 #BRecortar.place(x=520, y=350, width=110, height=23)
 BGuardar = tk.Button(ventana, text="Guardar Imagen", command=guardar_imagen)
 BGuardar.place(x=900, y=310, width=120, height=23)
-BArchivo = tk.Button(ventana, text="Archivo", command=archivo)
-BArchivo.place(x=60, y=310, width=75, height=23)
 BCamara = tk.Button(ventana, text="Camara", command=camara)
-BCamara.place(x=260, y=310, width=75, height=23)
+BCamara.place(x=65, y=310, width=75, height=23)
 BCapturar = tk.Button(ventana, text="Iniciar captura", command=Capturar)
 BFormas = tk.Button(ventana, text="Buscar Formas", command=rgb)
 BFormas.place(x=580,y=360,width=131,height=23)
@@ -338,14 +328,14 @@ BComparar = tk.Button(ventana, text="Comparar", command=comparar_imagenes)
 BComparar.place(x=1340, y=310, width=100, height=23)
 
 # Label
-LCargar = tk.Label(ventana, text="Cargar Imagen")
-LCargar.place(x=160, y=310, width=81, height=16)
 LUmbral = tk.Label(ventana, text="Umbralizacion")
 LUmbral.place(x=420, y=353, width=125, height=16)
 
 # Cuadros de Imagen
 LImagen = tk.Label(ventana, background="gray")
 LImagen.place(x=50,y=50,width=300,height=240)
+LImagenUmbralizada = tk.Label(ventana, background="gray")
+LImagenUmbralizada.place(x=50, y=400, width=300, height=240)
 LImagen2 = tk.Label(ventana, background="gray")
 LImagen2.place(x=430, y=50, width=300, height=240)
 LImagenManchas = tk.Label(ventana, background="gray")
